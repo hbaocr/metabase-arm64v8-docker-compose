@@ -1,0 +1,53 @@
+# Use postgres/example user/password credentials
+#docker pull arm64v8/postgres
+version: "3.8"
+#1. Create the network which 2 service below join in
+#network declare at the same level with version and services 
+# If network fail: try to remove the fail network then rebuild
+networks: 
+    metabase_network:
+        driver: bridge
+        ipam: # IP Address Management.
+            config:
+                - subnet: 10.5.0.0/16
+                #- gateway: 10.5.0.1
+services:
+  postgres-db:
+    image: arm64v8/postgres
+    ports:
+      - 6432:5432
+    volumes:
+      - ./db-data:/var/lib/postgresql/data
+      # this script only run when the /var/lib/postgresql/data is empty  (https://hub.docker.com/_/postgres)
+      - ./postgres-init-script:/docker-entrypoint-initdb.d/ # the bash script on this folder will run after the postgres is initalized
+    networks: 
+      metabase_network:
+        ipv4_address: 10.5.0.2
+    restart: always
+
+    environment: #default username postgres
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      APP_CUSTOM_DTB_NAME: "${METABASE_CONFIG_DTB}"
+
+  metabase_arm64v8:
+    image: duonghuynhbaocr/metabase:arm64v8_0.0.3
+    ports:
+      - 3000:3000
+    volumes:
+      - ./metabase-data:/metabase-data
+    networks: 
+      metabase_network:
+        ipv4_address: 10.5.0.3
+    restart: always
+
+    environment: 
+      MB_DB_TYPE: postgres # use postgres to store metabase config
+      MB_DB_DBNAME: "${METABASE_CONFIG_DTB}" # DTB name to store metabase config
+      MB_DB_PORT: 5432
+      MB_DB_USER: postgres #default username is : postgres
+      MB_DB_PASS: "${POSTGRES_PASSWORD}"
+      MB_DB_HOST: 10.5.0.2
+      #JAVA_OPTS: -Xmx512m # 512MB for JAVA
+    
+    depends_on: # run after myredis estashlished
+      - postgres-db
